@@ -1,0 +1,21 @@
+{
+  "name": "projeto-labelary2.0",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npm -w backend run dev",
+    "dev:all": "npm -w backend run dev & npm -w frontend run dev",
+    "build": "npm -w backend run build && npm -w frontend run build",
+    "start": "npm -w backend run start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "private": "true",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ]
+}

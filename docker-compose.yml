@@ -1,0 +1,23 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      PORT: "4000"
+      HOST: "0.0.0.0"
+      LABELARY_BASE_URL: "${LABELARY_BASE_URL:-http://api.labelary.com}"
+      MAX_FILES: "${MAX_FILES:-220}"
+      MAX_ZPL_BYTES: "${MAX_ZPL_BYTES:-250000}"
+    ports:
+      - "4000:4000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+

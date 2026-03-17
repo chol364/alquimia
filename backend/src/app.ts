@@ -8,7 +8,7 @@ const app = Fastify({
   logger: {
     level: process.env.LOG_LEVEL ?? "info",
   },
-  bodyLimit: Number(process.env.BODY_LIMIT ?? 20_000_000), // ~20MB
+  bodyLimit: Number(process.env.BODY_LIMIT ?? 20_000_000),
 });
 
 await app.register(cors, {
@@ -17,11 +17,17 @@ await app.register(cors, {
 
 await app.register(multipart, {
   limits: {
-    // limite padrão mais alto para suportar ZIPs grandes;
-    // ainda pode ser sobrescrito por variável de ambiente.
-    fileSize: Number(process.env.MAX_ZPL_BYTES ?? 20_000_000), // 20MB por arquivo
+    fileSize: Number(process.env.MAX_ZPL_BYTES ?? 20_000_000),
     files: Number(process.env.MAX_FILES ?? 2000),
   },
+});
+
+app.get("/", async () => {
+  return {
+    service: "Alquimia Studio API",
+    status: "online",
+    health: "/api/health"
+  };
 });
 
 app.get("/api/health", async () => {
@@ -35,4 +41,3 @@ const port = Number(process.env.PORT ?? 4000);
 const host = process.env.HOST ?? "0.0.0.0";
 
 await app.listen({ port, host });
-

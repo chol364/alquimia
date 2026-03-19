@@ -1,14 +1,241 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  font-family: "Space Grotesk", sans-serif;
+  color: #e2e8f0;
+  background:
+    radial-gradient(circle at top, rgba(34, 211, 238, 0.18), transparent 30%),
+    linear-gradient(180deg, #04111f 0%, #071826 45%, #03101a 100%);
+}
+
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
   margin: 0;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at top, rgba(34, 211, 238, 0.14), transparent 28%),
+    linear-gradient(180deg, #04111f 0%, #071826 45%, #03101a 100%);
 }
 
+* {
+  box-sizing: border-box;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.985);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes aurora-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(0, -18px, 0) scale(1.06);
+  }
+}
+
+@keyframes soft-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.95;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes status-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.08);
+  }
+
+  50% {
+    box-shadow: 0 0 28px 2px rgba(34, 211, 238, 0.22);
+  }
+}
+
+@keyframes preview-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+    filter: saturate(0.85) blur(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: saturate(1) blur(0);
+  }
+}
+
+@keyframes menu-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.96);
+    filter: blur(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes orbit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes grid-shift {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(18px);
+  }
+}
+
+@keyframes logo-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: drop-shadow(0 0 0 rgba(34, 211, 238, 0));
+  }
+
+  50% {
+    transform: translate3d(0, -4px, 0) scale(1.02);
+    filter: drop-shadow(0 12px 24px rgba(34, 211, 238, 0.18));
+  }
+}
+
+@keyframes logo-spin-hover {
+  from {
+    transform: rotate(0deg) scale(1.04);
+  }
+
+  to {
+    transform: rotate(360deg) scale(1.04);
+  }
+}
+
+.animate-panel-in {
+  animation: panel-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-panel-delay-1 {
+  animation-delay: 90ms;
+}
+
+.animate-panel-delay-2 {
+  animation-delay: 180ms;
+}
+
+.animate-panel-delay-3 {
+  animation-delay: 270ms;
+}
+
+.animate-aurora-float {
+  animation: aurora-float 8s ease-in-out infinite;
+}
+
+.animate-soft-pulse {
+  animation: soft-pulse 3.6s ease-in-out infinite;
+}
+
+.animate-status-glow {
+  animation: status-glow 2.8s ease-in-out infinite;
+}
+
+.animate-preview-in {
+  animation: preview-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-menu-reveal {
+  animation: menu-reveal 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.home-hero-card {
+  box-shadow:
+    0 30px 90px -45px rgba(34, 211, 238, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.home-orbit {
+  position: absolute;
+  border-radius: 9999px;
+  border: 1px solid rgba(103, 232, 249, 0.18);
+  animation: orbit-spin linear infinite;
+}
+
+.home-orbit-a {
+  inset: 8% 16%;
+  animation-duration: 18s;
+}
+
+.home-orbit-b {
+  inset: 18% 6%;
+  animation-duration: 26s;
+  animation-direction: reverse;
+}
+
+.home-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.1) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 90%);
+  animation: grid-shift 6s linear infinite alternate;
+}
+
+.logo-badge {
+  box-shadow:
+    0 18px 40px -28px rgba(34, 211, 238, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.logo-mark {
+  animation: logo-drift 5.6s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.logo-badge:hover .logo-mark {
+  animation: logo-spin-hover 700ms cubic-bezier(0.22, 1, 0.36, 1) 1;
+}

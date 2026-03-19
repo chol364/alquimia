@@ -6,8 +6,10 @@ import { extractZplsFromTextFile, extractZplsFromZip } from "../services/zplBatc
 export const batchRoutes = async (app) => {
     const paramsSchema = z.object({
         dpmm: z.coerce.number().int().min(6).max(24).default(8),
-        widthIn: z.coerce.number().positive().default(4),
-        heightIn: z.coerce.number().positive().default(6),
+        widthMm: z.coerce.number().positive().default(100),
+        heightMm: z.coerce.number().positive().default(150),
+        widthIn: z.coerce.number().positive().optional(),
+        heightIn: z.coerce.number().positive().optional(),
         rotation: z
             .coerce
             .number()
@@ -68,19 +70,25 @@ export const batchRoutes = async (app) => {
         }
         const limit = pLimit(params.concurrency);
         const results = await Promise.all(filtered.map((it, idx) => limit(async () => {
-            const pdf = await renderLabel({
-                format: "pdf",
-                zpl: it.zpl,
-                dpmm: params.dpmm,
-                widthIn: params.widthIn,
-                heightIn: params.heightIn,
-                index: 0,
-                rotation: params.rotation,
-                darkness: params.darkness,
-            });
-            const safeBase = it.name.replace(/\.(zpl|txt)$/i, "");
-            const outName = `${String(idx + 1).padStart(3, "0")}-${safeBase}.pdf`;
-            return { outName, pdf };
+            try {
+                const pdf = await renderLabel({
+                    format: "pdf",
+                    zpl: it.zpl,
+                    dpmm: params.dpmm,
+                    widthMm: params.widthMm ?? params.widthIn ?? 100,
+                    heightMm: params.heightMm ?? params.heightIn ?? 150,
+                    index: 0,
+                    rotation: params.rotation,
+                    darkness: params.darkness,
+                });
+                const safeBase = it.name.replace(/\.(zpl|txt)$/i, "");
+                const outName = `${String(idx + 1).padStart(3, "0")}-${safeBase}.pdf`;
+                return { outName, pdf };
+            }
+            catch (err) {
+                console.error(`Erro ao renderizar label [${it.name}]:`, err.message);
+                throw err;
+            }
         })));
         const zip = new AdmZip();
         for (const r of results)

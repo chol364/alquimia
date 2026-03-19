@@ -1,29 +1,54 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useDropzone } from "react-dropzone";
-import Particles, { initParticlesEngine } from "@tsparticles/react";
-import { loadSlim } from "@tsparticles/slim";
+﻿import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+
+type ModuleId = "home" | "studio" | "operations";
 
 type ZplItem = {
   id: string;
   name: string;
   zpl: string;
-  kind: "text";
 };
 
 type RenderParams = {
   dpmm: number;
-  widthIn: number;
-  heightIn: number;
+  widthMm: number;
+  heightMm: number;
   rotation: 0 | 90 | 180 | 270;
-  darkness?: number;
 };
+
+const modules = [
+  {
+    id: "home" as const,
+    label: "Home",
+    eyebrow: "Entrada",
+    description: "Visao geral, destaque visual e acesso rapido aos modulos.",
+  },
+  {
+    id: "studio" as const,
+    label: "Studio ZPL",
+    eyebrow: "Edicao",
+    description: "Area de upload, edicao e preparo do conteudo ZPL.",
+  },
+  {
+    id: "operations" as const,
+    label: "Operacoes",
+    eyebrow: "Gestao",
+    description: "Resumo do lote e atalhos para exportacao e conferencia.",
+  },
+];
 
 const defaultParams: RenderParams = {
   dpmm: 8,
-  widthIn: 100, // 100mm
-  heightIn: 150, // 150mm
+  widthMm: 100,
+  heightMm: 150,
   rotation: 0,
 };
+
+const rotationOptions: Array<{ value: RenderParams["rotation"]; label: string; description: string }> = [
+  { value: 0, label: "0°", description: "Padrao" },
+  { value: 90, label: "90°", description: "Horizontal" },
+  { value: 180, label: "180°", description: "Invertida" },
+  { value: 270, label: "270°", description: "Lateral" },
+];
 
 function apiBase(): string {
   const fromEnv = import.meta.env.VITE_API_BASE_URL as string | undefined;
@@ -32,661 +57,947 @@ function apiBase(): string {
 
 async function renderPreview(zpl: string, params: RenderParams): Promise<Blob> {
   const base = apiBase();
-  const res = await fetch(`${base}/api/render/preview`, {
+  const response = await fetch(`${base}/api/render/preview`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ zpl, index: 0, ...params }),
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `Erro ao renderizar (${res.status})`);
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `Erro ao renderizar (${response.status})`);
   }
-  return await res.blob();
+
+  return response.blob();
 }
 
 async function downloadBatchZip(items: ZplItem[], params: RenderParams): Promise<Blob> {
   const base = apiBase();
-  const fd = new FormData();
-  fd.set("dpmm", String(params.dpmm));
-  fd.set("widthIn", String(params.widthIn));
-  fd.set("heightIn", String(params.heightIn));
-  fd.set("rotation", String(params.rotation));
-  if (typeof params.darkness === "number") fd.set("darkness", String(params.darkness));
+  const formData = new FormData();
 
-  for (const it of items) {
-    fd.append(
+  formData.set("dpmm", String(params.dpmm));
+  formData.set("widthMm", String(params.widthMm));
+  formData.set("heightMm", String(params.heightMm));
+  formData.set("rotation", String(params.rotation));
+
+  for (const item of items) {
+    formData.append(
       "files",
-      new Blob([it.zpl], { type: "text/plain" }),
-      it.name.toLowerCase().endsWith(".zpl") || it.name.toLowerCase().endsWith(".txt")
-        ? it.name
-        : `${it.name}.zpl`,
+      new Blob([item.zpl], { type: "text/plain" }),
+      item.name.toLowerCase().endsWith(".zpl") || item.name.toLowerCase().endsWith(".txt")
+        ? item.name
+        : `${item.name}.zpl`,
     );
   }
 
-  const res = await fetch(`${base}/api/batch/pdf`, { method: "POST", body: fd });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `Erro ao gerar ZIP (${res.status})`);
+  const response = await fetch(`${base}/api/batch/pdf`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(text || `Erro ao gerar ZIP (${response.status})`);
   }
-  return await res.blob();
+
+  return response.blob();
 }
 
 function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
 }
 
+function makeId() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function ParticleField({ isDarkMode }: { isDarkMode: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    const mouse = { x: -9999, y: -9999, radius: 140 };
+    const particles = Array.from({ length: 80 }, () => ({
+      x: 0,
+      y: 0,
+      vx: (Math.random() - 0.5) * 0.55,
+      vy: (Math.random() - 0.5) * 0.55,
+      size: Math.random() * 2.2 + 0.8,
+    }));
+
+    let width = 0;
+    let height = 0;
+    let animationFrame = 0;
+
+    function resize() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      canvas.width = Math.floor(width * window.devicePixelRatio);
+      canvas.height = Math.floor(height * window.devicePixelRatio);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      context.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+
+      for (const particle of particles) {
+        if (particle.x === 0 && particle.y === 0) {
+          particle.x = Math.random() * width;
+          particle.y = Math.random() * height;
+        }
+      }
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      mouse.x = event.clientX;
+      mouse.y = event.clientY;
+    }
+
+    function handlePointerLeave() {
+      mouse.x = -9999;
+      mouse.y = -9999;
+    }
+
+    function draw() {
+      context.clearRect(0, 0, width, height);
+
+      for (let i = 0; i < particles.length; i += 1) {
+        const particle = particles[i];
+        const dx = mouse.x - particle.x;
+        const dy = mouse.y - particle.y;
+        const distance = Math.hypot(dx, dy);
+
+        if (distance < mouse.radius) {
+          const force = (mouse.radius - distance) / mouse.radius;
+          const angle = Math.atan2(dy, dx);
+          particle.vx -= Math.cos(angle) * force * 0.08;
+          particle.vy -= Math.sin(angle) * force * 0.08;
+        }
+
+        particle.x += particle.vx;
+        particle.y += particle.vy;
+        particle.vx *= 0.992;
+        particle.vy *= 0.992;
+
+        if (particle.x < -30) particle.x = width + 30;
+        if (particle.x > width + 30) particle.x = -30;
+        if (particle.y < -30) particle.y = height + 30;
+        if (particle.y > height + 30) particle.y = -30;
+
+        context.beginPath();
+        context.fillStyle = isDarkMode ? "rgba(103, 232, 249, 0.7)" : "rgba(8, 145, 178, 0.85)";
+        context.shadowBlur = isDarkMode ? 16 : 18;
+        context.shadowColor = isDarkMode ? "rgba(34, 211, 238, 0.35)" : "rgba(8, 145, 178, 0.3)";
+        context.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        context.fill();
+      }
+
+      context.shadowBlur = 0;
+
+      for (let i = 0; i < particles.length; i += 1) {
+        for (let j = i + 1; j < particles.length; j += 1) {
+          const a = particles[i];
+          const b = particles[j];
+          const distance = Math.hypot(a.x - b.x, a.y - b.y);
+
+          if (distance < 120) {
+            context.beginPath();
+            context.strokeStyle = isDarkMode
+              ? `rgba(56, 189, 248, ${0.14 - distance / 1000})`
+              : `rgba(14, 116, 144, ${0.24 - distance / 700})`;
+            context.lineWidth = 1;
+            context.moveTo(a.x, a.y);
+            context.lineTo(b.x, b.y);
+            context.stroke();
+          }
+        }
+      }
+
+      animationFrame = window.requestAnimationFrame(draw);
+    }
+
+    resize();
+    draw();
+    window.addEventListener("resize", resize);
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerleave", handlePointerLeave);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerleave", handlePointerLeave);
+    };
+  }, [isDarkMode]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className={cn("pointer-events-none fixed inset-0 z-0", isDarkMode ? "opacity-80" : "opacity-95")}
+      aria-hidden="true"
+    />
+  );
+}
+
 export default function App() {
+  const [activeModule, setActiveModule] = useState<ModuleId>("home");
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [items, setItems] = useState<ZplItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const selected = useMemo(
-    () => items.find((i) => i.id === selectedId) ?? null,
-    [items, selectedId],
-  );
-
   const [params, setParams] = useState<RenderParams>(defaultParams);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isRendering, setIsRendering] = useState(false);
   const [isBatching, setIsBatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const previewUrlRef = useRef<string | null>(null);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isRotationMenuOpen, setIsRotationMenuOpen] = useState(false);
+  const rotationMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const [particlesReady, setParticlesReady] = useState(false);
-  useEffect(() => {
-    initParticlesEngine(async (engine) => {
-      await loadSlim(engine);
-    }).then(() => setParticlesReady(true));
-  }, []);
+  const selected = useMemo(
+    () => items.find((item) => item.id === selectedId) ?? null,
+    [items, selectedId],
+  );
 
   useEffect(() => {
     return () => {
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
     };
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    multiple: true,
-    accept: {
-      "text/plain": [".zpl", ".txt"],
-    },
-    onDrop: async (files) => {
-      setError(null);
-      const next: ZplItem[] = [];
-      for (const f of files) {
-        const text = await f.text();
-        next.push({
-          id: crypto.randomUUID(),
-          name: f.name,
-          zpl: text,
-          kind: "text",
-        });
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!rotationMenuRef.current?.contains(event.target as Node)) {
+        setIsRotationMenuOpen(false);
       }
-      setItems((prev) => {
-        const merged = [...next, ...prev];
-        if (!selectedId && merged.length) setSelectedId(merged[0]!.id);
-        return merged;
-      });
-    },
-  });
+    }
 
-  async function doRender() {
-    if (!selected) return;
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsRotationMenuOpen(false);
+      }
+    }
+
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, []);
+
+  async function handleFileUpload(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (!files.length) return;
+
+    const nextItems: ZplItem[] = [];
+
+    for (const file of files) {
+      const text = await file.text();
+      nextItems.push({
+        id: makeId(),
+        name: file.name,
+        zpl: text,
+      });
+    }
+
+    setItems((current) => {
+      const merged = [...nextItems, ...current];
+      if (!selectedId && merged.length > 0) {
+        setSelectedId(merged[0].id);
+      }
+      return merged;
+    });
+    setActiveModule("studio");
+    event.target.value = "";
+  }
+
+  async function handleRender() {
+    if (!selected?.zpl.trim()) return;
+
     setError(null);
     setIsRendering(true);
+
     try {
       const blob = await renderPreview(selected.zpl, params);
       const url = URL.createObjectURL(blob);
-      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+
+      if (previewUrlRef.current) {
+        URL.revokeObjectURL(previewUrlRef.current);
+      }
+
       previewUrlRef.current = url;
       setPreviewUrl(url);
-    } catch (e) {
+    } catch (err) {
       setPreviewUrl(null);
-      setError(e instanceof Error ? e.message : "Erro inesperado");
+      setError(err instanceof Error ? err.message : "Erro inesperado");
     } finally {
       setIsRendering(false);
     }
   }
 
-  async function doBatchDownload() {
+  async function handleDownloadZip() {
     if (!items.length) return;
+
     setError(null);
     setIsBatching(true);
+
     try {
       const blob = await downloadBatchZip(items, params);
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "labels.zip";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "labels.zip";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
       URL.revokeObjectURL(url);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Erro inesperado");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro inesperado");
     } finally {
       setIsBatching(false);
     }
   }
 
-  useEffect(() => {
-    if (!selected) return;
-    void doRender();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  const completedItems = items.filter((item) => item.zpl.trim()).length;
+  const totalCharacters = items.reduce((total, item) => total + item.zpl.length, 0);
+  const currentRotation =
+    rotationOptions.find((option) => option.value === params.rotation) ?? rotationOptions[0];
 
-  return (
-    <div className={cn(
-      "relative min-h-full transition-colors duration-300",
-      isDarkMode ? "text-slate-100" : "text-slate-900"
-    )}>
-      {particlesReady ? (
-        <Particles
-          id="bg"
-          options={{
-            background: { color: { value: isDarkMode ? "#0b0618" : "#f8fafc" } },
-            fullScreen: { enable: true, zIndex: 0 },
-            fpsLimit: 60,
-            interactivity: {
-              events: {
-                onHover: {
-                  enable: true,
-                  mode: "repulse",
-                },
-                resize: {
-                  enable: true,
-                },
-              },
-              modes: {
-                repulse: {
-                  distance: 160,
-                  duration: 0.2,
-                },
-              },
-            },
-            particles: {
-              number: { value: 70, density: { enable: true } },
-              color: { value: isDarkMode ? ["#a855f7", "#c084fc", "#22c55e"] : ["#8b5cf6", "#a78bfa", "#10b981"] },
-              links: {
-                enable: true,
-                distance: 140,
-                opacity: isDarkMode ? 0.25 : 0.15,
-                width: 1,
-                color: isDarkMode ? "#7c3aed" : "#6d28d9",
-              },
-              move: { enable: true, speed: 1.2 },
-              opacity: { value: isDarkMode ? 0.4 : 0.3 },
-              size: { value: { min: 1, max: 3 } },
-            },
-            detectRetina: true,
-          }}
-        />
-      ) : null}
-
-      <div className={cn(
-        "relative z-10 mx-auto flex min-h-full max-w-7xl flex-col px-4 py-6 transition-colors duration-300",
-        isDarkMode 
-          ? "text-slate-100 selection:bg-violet-400/30 selection:text-white"
-          : "text-slate-900 selection:bg-violet-400/20 selection:text-slate-900"
-      )}>
-        <header className="mb-5 flex items-center justify-between gap-3">
-          <div>
+  function renderHome() {
+    return (
+      <main className="flex flex-1 flex-col gap-6">
+        <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className={cn(
+            "animate-panel-in rounded-[2rem] border p-8 backdrop-blur-xl",
+            isDarkMode
+              ? "border-white/10 bg-white/5"
+              : "border-white/70 bg-white/75 shadow-[0_30px_90px_-50px_rgba(14,165,233,0.28)]",
+          )}>
             <div className={cn(
-              "text-xs font-semibold tracking-widest transition-colors duration-300",
-              isDarkMode ? "text-violet-300" : "text-violet-600"
+              "inline-flex rounded-full border px-4 py-2 text-xs uppercase tracking-[0.28em]",
+              isDarkMode
+                ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-100"
+                : "border-cyan-300/60 bg-cyan-100/90 text-cyan-900",
             )}>
-              ALQUIMIA STUDIO
+              Plataforma de etiquetas
             </div>
-            <div className={cn(
-              "text-xl font-semibold transition-colors duration-300",
-              isDarkMode ? "text-violet-100" : "text-violet-900"
+            <h1 className={cn(
+              "mt-6 max-w-4xl text-4xl font-semibold leading-tight md:text-6xl",
+              isDarkMode ? "text-white" : "text-slate-950",
             )}>
-              Alquimia Studio
-            </div>
-            <div className={cn(
-              "mt-1 text-xs transition-colors duration-300",
-              isDarkMode ? "text-slate-300" : "text-slate-600"
+              alquimia studio foi criado para facilitar a conversão das suas etiquetas do ecommerce.
+            </h1>
+            <p className={cn(
+              "mt-5 max-w-2xl text-base leading-7 md:text-lg",
+              isDarkMode ? "text-slate-300" : "text-slate-700",
             )}>
-              Colar o ZPL no editor ou faça upload. O preview atualiza ao trocar o item.
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsDarkMode(!isDarkMode)}
-              className={cn(
-                "relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-violet-400/50 focus:ring-offset-2 focus:ring-offset-black/20",
-                isDarkMode ? "bg-violet-600" : "bg-amber-400",
-              )}
-              title={isDarkMode ? "Modo escuro" : "Modo claro"}
-            >
-              <span
+              A entrada agora funciona como dashboard do sistema: apresenta o produto, destaca o
+              lote atual e leva o usuario direto para edicao ou operacao.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => setActiveModule("studio")}
                 className={cn(
-                  "inline-block h-6 w-6 transform rounded-full bg-white shadow-lg transition-transform duration-300",
-                  isDarkMode ? "translate-x-1" : "translate-x-7",
+                  "rounded-full px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
+                  isDarkMode
+                    ? "bg-cyan-400 text-slate-950"
+                    : "bg-slate-950 text-white shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]",
                 )}
               >
-                <span className="flex h-full w-full items-center justify-center">
-                  {isDarkMode ? (
-                    <svg className="h-4 w-4 text-violet-600" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-                    </svg>
-                  ) : (
-                    <svg className="h-4 w-4 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-                    </svg>
-                  )}
-                </span>
-              </span>
-            </button>
-            <span
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs transition-colors duration-300",
-                isRendering
-                  ? isDarkMode
-                    ? "border-cyan-400/40 bg-cyan-400/10 text-cyan-100"
-                    : "border-cyan-600/40 bg-cyan-100/50 text-cyan-800"
-                  : isDarkMode
-                    ? "border-slate-400/20 bg-white/5 text-slate-200"
-                    : "border-slate-300/40 bg-slate-100/50 text-slate-700"
-              )}
-            >
-              {isRendering ? "Renderizando..." : isBatching ? "Gerando ZIP..." : "Pronto"}
-            </span>
-            <button
-              onClick={() => void doRender()}
-              disabled={!selected || isRendering || isBatching}
-              className={cn(
-                "rounded-md border px-3 py-2 text-sm font-medium transition-all duration-200",
-                isDarkMode
-                  ? "border-violet-400/30 bg-violet-500/15 hover:bg-violet-500/25 hover:shadow-violet-500/10"
-                  : "border-violet-500/30 bg-violet-50 hover:bg-violet-100 hover:shadow-violet-200/20",
-                "hover:-translate-y-0.5 hover:shadow-lg",
-                "active:translate-y-0 active:scale-[0.99]",
-                "focus-visible:outline-none focus:ring-2 focus:ring-violet-400/50 focus:ring-offset-2",
-                isDarkMode ? "focus:ring-offset-black/20" : "focus:ring-offset-white/20",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-              )}
-            >
-              Atualizar preview
-            </button>
-            <button
-              onClick={() => void doBatchDownload()}
-              disabled={!items.length || isRendering || isBatching}
-              className={cn(
-                "rounded-md border px-3 py-2 text-sm font-medium transition-all duration-200",
-                isDarkMode
-                  ? "border-white/10 bg-white/10 hover:bg-white/15 hover:shadow-violet-500/10"
-                  : "border-slate-300/40 bg-slate-100/50 hover:bg-slate-200/50 hover:shadow-slate-200/20",
-                "hover:-translate-y-0.5 hover:shadow-lg",
-                "active:translate-y-0 active:scale-[0.99]",
-                "focus-visible:outline-none focus:ring-2 focus:ring-violet-400/50 focus:ring-offset-2",
-                isDarkMode ? "focus:ring-offset-black/20" : "focus:ring-offset-white/20",
-                "disabled:cursor-not-allowed disabled:opacity-50",
-              )}
-              title="Gera um ZIP com um PDF por item"
-            >
-              Baixar ZIP (PDFs)
-            </button>
-          </div>
-        </header>
-
-        <main className="grid flex-1 grid-cols-12 gap-4">
-          <section className="col-span-12 lg:col-span-3">
-            <div className={cn(
-              "rounded-xl border p-3 backdrop-blur transition-all duration-200 hover:border-opacity-35",
-              isDarkMode
-                ? "border-violet-500/25 bg-violet-950/40 hover:border-violet-400/35"
-                : "border-violet-200/40 bg-violet-50/50 hover:border-violet-300/50"
-            )}>
-              <div className={cn(
-                "mb-2 text-sm font-semibold transition-colors duration-300",
-                isDarkMode ? "text-slate-100" : "text-slate-900"
-              )}>
-                Upload
-              </div>
-              <div
-                {...getRootProps()}
+                Abrir studio
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveModule("operations")}
                 className={cn(
-                  "cursor-pointer rounded-lg border border-dashed px-3 py-4 transition-all duration-200",
+                  "rounded-full border px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
                   isDarkMode
-                    ? "border-white/15 bg-black/20 hover:bg-black/30 hover:shadow-violet-500/10"
-                    : "border-slate-300/40 bg-slate-100/50 hover:bg-slate-200/50 hover:shadow-slate-200/20",
-                  "hover:-translate-y-0.5 hover:shadow-lg",
-                  isDragActive &&
-                    (isDarkMode
-                      ? "border-violet-300/60 bg-violet-400/10 shadow-lg shadow-violet-500/15"
-                      : "border-violet-400/60 bg-violet-100/50 shadow-lg shadow-violet-300/20")
-                )}>
-                <input {...getInputProps()} />
-                <div className={cn(
-                  "text-sm transition-colors duration-300",
-                  isDarkMode ? "text-slate-200" : "text-slate-700"
-                )}>
-                  Arraste e solte <span className="font-semibold">.zpl</span> ou{" "}
-                  <span className="font-semibold">.txt</span> aqui
-                </div>
-                <div className={cn(
-                  "mt-1 text-xs transition-colors duration-300",
-                  isDarkMode ? "text-slate-400" : "text-slate-500"
-                )}>
-                  Dica: você também pode começar digitando no editor — ele cria um item “Manual.zpl”.
-                </div>
-              </div>
+                    ? "border-white/15 bg-white/5 text-white hover:bg-white/10"
+                    : "border-slate-300/60 bg-white text-slate-800 hover:bg-slate-50",
+                )}
+              >
+                Ir para operacoes
+              </button>
+            </div>
+          </div>
 
-              <div className="mt-4">
+          <div className={cn(
+            "animate-panel-in animate-panel-delay-1 rounded-[2rem] border p-8 backdrop-blur-xl",
+            isDarkMode
+              ? "border-cyan-400/20 bg-slate-950/70"
+              : "border-cyan-200/70 bg-white/75 shadow-[0_30px_90px_-50px_rgba(34,211,238,0.3)]",
+          )}>
+            <div className={cn(
+              "home-hero-card relative overflow-hidden rounded-[1.5rem] border p-6",
+              isDarkMode
+                ? "border-white/10 bg-[linear-gradient(135deg,rgba(8,145,178,0.18),rgba(15,23,42,0.75))]"
+                : "border-white/70 bg-[linear-gradient(135deg,rgba(103,232,249,0.34),rgba(255,255,255,0.9))]",
+            )}>
+              <div className="home-orbit home-orbit-a" />
+              <div className="home-orbit home-orbit-b" />
+              <div className="home-grid" />
+              <div className="relative">
                 <div className={cn(
-                  "mb-2 text-sm font-semibold transition-colors duration-300",
-                  isDarkMode ? "text-slate-100" : "text-slate-900"
-                )}>
-                  Itens ({items.length})
-                </div>
-                <div className={cn(
-                  "max-h-[44vh] overflow-auto rounded-lg border transition-colors duration-200",
-                  isDarkMode
-                    ? "border-white/10 bg-black/10"
-                    : "border-slate-300/40 bg-slate-100/30"
-                )}>
-                  {items.length ? (
-                    <ul className={cn(
-                      "divide-y transition-colors duration-200",
-                      isDarkMode ? "divide-white/10" : "divide-slate-300/40"
-                    )}>
-                      {items.map((it) => (
-                        <li key={it.id}>
-                          <button
-                            className={cn(
-                              "group w-full px-3 py-2 text-left text-sm transition-colors duration-150",
-                              it.id === selectedId
-                                ? isDarkMode
-                                  ? "bg-white/10"
-                                  : "bg-slate-200/50"
-                                : isDarkMode
-                                  ? "hover:bg-white/5"
-                                  : "hover:bg-slate-100/30",
-                            )}
-                            onClick={() => setSelectedId(it.id)}
-                          >
-                            <div className={cn(
-                              "truncate font-medium transition-colors duration-300",
-                              isDarkMode ? "text-slate-100" : "text-slate-900"
-                            )}>
-                              {it.name}
-                            </div>
-                            <div className={cn(
-                              "truncate text-xs transition-colors duration-300",
-                              isDarkMode ? "text-slate-400" : "text-slate-500"
-                            )}>
-                              {it.zpl.trim().slice(0, 60) || "(vazio)"}
-                            </div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className={cn(
-                      "px-3 py-3 text-sm transition-colors duration-300",
-                      isDarkMode ? "text-slate-400" : "text-slate-500"
-                    )}>
-                      Nenhum item ainda. Comece pelo upload ou cole um ZPL no editor.
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <div className={cn(
-                  "mb-2 text-sm font-semibold transition-colors duration-300",
-                  isDarkMode ? "text-slate-100" : "text-slate-900"
-                )}>
-                  Parâmetros
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className={cn(
-                    "text-xs transition-colors duration-300",
-                    isDarkMode ? "text-slate-200" : "text-slate-700"
-                  )}>
-                    DPMM
-                    <input
-                      type="number"
-                      value={params.dpmm}
-                      min={6}
-                      max={24}
-                      onChange={(e) =>
-                        setParams((p) => ({ ...p, dpmm: Number(e.target.value) }))
-                      }
+                  "text-xs uppercase tracking-[0.3em]",
+                  isDarkMode ? "text-cyan-100" : "text-cyan-800",
+                )}>Status atual</div>
+                <div className="mt-6 grid gap-4">
+                  {[
+                    { label: "Arquivos", value: String(items.length), note: `${completedItems} prontos` },
+                    { label: "Caracteres ZPL", value: String(totalCharacters), note: "no lote atual" },
+                    {
+                      label: "Formato",
+                      value: `${params.widthMm} x ${params.heightMm} mm`,
+                      note: `${params.dpmm} dpmm · ${params.rotation}°`,
+                    },
+                  ].map((card) => (
+                    <div
+                      key={card.label}
                       className={cn(
-                        "mt-1 w-full rounded-md border px-2 py-1 text-sm outline-none transition-all",
+                        "rounded-2xl border p-4",
                         isDarkMode
-                          ? "border-white/10 bg-black/30 text-slate-100 focus:border-violet-300/60 focus:ring-violet-400/20"
-                          : "border-slate-300/40 bg-white/70 text-slate-900 focus:border-violet-400/60 focus:ring-violet-300/20"
-                      )}
-                    />
-                  </label>
-                  <label className={cn(
-                    "text-xs transition-colors duration-300",
-                    isDarkMode ? "text-slate-300" : "text-slate-600"
-                  )}>
-                    Rotação
-                    <select
-                      value={params.rotation}
-                      onChange={(e) =>
-                        setParams((p) => ({
-                          ...p,
-                          rotation: Number(e.target.value) as RenderParams["rotation"],
-                        }))
-                      }
-                      className={cn(
-                        "mt-1 w-full rounded-md border px-2 py-1 text-sm outline-none transition-all",
-                        isDarkMode
-                          ? "border-white/10 bg-black/30 text-slate-100 focus:border-violet-300/60 focus:ring-violet-400/20"
-                          : "border-slate-300/40 bg-white/70 text-slate-900 focus:border-violet-400/60 focus:ring-violet-300/20"
+                          ? "border-white/10 bg-white/5"
+                          : "border-white/80 bg-white/70",
                       )}
                     >
-                      <option value={0}>0</option>
-                      <option value={90}>90</option>
-                      <option value={180}>180</option>
-                      <option value={270}>270</option>
-                    </select>
-                  </label>
-                  <label className={cn(
-                    "text-xs transition-colors duration-300",
-                    isDarkMode ? "text-slate-300" : "text-slate-600"
-                  )}>
-                    Largura (mm)
-                    <input
-                      type="number"
-                      value={params.widthIn}
-                      step="0.1"
-                      min={10}
-                      max={200}
-                      onChange={(e) =>
-                        setParams((p) => ({
-                          ...p,
-                          widthIn: Number(e.target.value),
-                        }))
-                      }
-                      className={cn(
-                        "mt-1 w-full rounded-md border px-2 py-1 text-sm outline-none transition-all",
-                        isDarkMode
-                          ? "border-white/10 bg-black/30 text-slate-100 focus:border-violet-300/60 focus:ring-violet-400/20"
-                          : "border-slate-300/40 bg-white/70 text-slate-900 focus:border-violet-400/60 focus:ring-violet-300/20"
-                      )}
-                    />
-                  </label>
-                  <label className={cn(
-                    "text-xs transition-colors duration-300",
-                    isDarkMode ? "text-slate-300" : "text-slate-600"
-                  )}>
-                    Altura (mm)
-                    <input
-                      type="number"
-                      value={params.heightIn}
-                      step="0.1"
-                      min={10}
-                      max={300}
-                      onChange={(e) =>
-                        setParams((p) => ({
-                          ...p,
-                          heightIn: Number(e.target.value),
-                        }))
-                      }
-                      className={cn(
-                        "mt-1 w-full rounded-md border px-2 py-1 text-sm outline-none transition-all",
-                        isDarkMode
-                          ? "border-white/10 bg-black/30 text-slate-100 focus:border-violet-300/60 focus:ring-violet-400/20"
-                          : "border-slate-300/40 bg-white/70 text-slate-900 focus:border-violet-400/60 focus:ring-violet-300/20"
-                      )}
-                    />
-                  </label>
+                      <div className={cn("text-xs uppercase tracking-[0.25em]", isDarkMode ? "text-slate-400" : "text-slate-500")}>{card.label}</div>
+                      <div className={cn("mt-2 text-2xl font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>{card.value}</div>
+                      <div className={cn("mt-1 text-sm", isDarkMode ? "text-slate-300" : "text-slate-600")}>{card.note}</div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
-          </section>
+          </div>
+        </section>
 
-          <section className="col-span-12 lg:col-span-5">
-            <div className={cn(
-              "rounded-xl border p-3 backdrop-blur transition-all duration-200 hover:border-opacity-35",
-              isDarkMode
-                ? "border-violet-500/25 bg-violet-950/40 hover:border-violet-400/35"
-                : "border-violet-200/40 bg-violet-50/50 hover:border-violet-300/50"
-            )}>
-              <div className="mb-2 flex items-center justify-between">
-                <div className={cn(
-                  "text-sm font-semibold transition-colors duration-300",
-                  isDarkMode ? "text-slate-100" : "text-slate-900"
-                )}>
-                  ZPL (editor)
-                </div>
-                <div className={cn(
-                  "text-xs transition-colors duration-300",
-                  isDarkMode ? "text-slate-400" : "text-slate-500"
-                )}>
-                  {selected ? selected.name : "Selecione um item"}
-                </div>
-              </div>
-              <div className={cn(
-                "mb-2 text-xs transition-colors duration-300",
-                isDarkMode ? "text-slate-300" : "text-slate-600"
-              )}>
-                Cole um ZPL aqui. Se o ZPL tiver várias etiquetas, o download gera um PDF com várias páginas.
-              </div>
-              <textarea
-                value={selected?.zpl ?? ""}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setError(null);
-                  if (!selectedId) {
-                    const id = crypto.randomUUID();
-                    const newItem: ZplItem = {
-                      id,
-                      name: "Manual.zpl",
-                      zpl: next,
-                      kind: "text",
-                    };
-                    setSelectedId(id);
-                    setItems((prev) => [newItem, ...prev]);
-                    return;
-                  }
-                  setItems((prev) =>
-                    prev.map((it) => (it.id === selectedId ? { ...it, zpl: next } : it)),
-                  );
-                }}
+        <section className="grid gap-4 lg:grid-cols-3">
+          {modules.map((module, index) => (
+            <button
+              key={module.id}
+              type="button"
+              onClick={() => setActiveModule(module.id)}
+              className={cn(
+                "animate-panel-in rounded-[1.5rem] border p-6 text-left transition hover:-translate-y-1",
+                isDarkMode
+                  ? "border-white/10 bg-white/5 hover:bg-white/10"
+                  : "border-slate-200/90 bg-white/92 hover:bg-white shadow-[0_24px_80px_-44px_rgba(8,145,178,0.34)]",
+              )}
+              style={{ animationDelay: `${120 + index * 80}ms` }}
+            >
+              <div className={cn("text-xs uppercase tracking-[0.28em]", isDarkMode ? "text-cyan-200" : "text-cyan-800")}>{module.eyebrow}</div>
+              <div className={cn("mt-4 text-2xl font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>{module.label}</div>
+              <p className={cn("mt-3 text-sm leading-6", isDarkMode ? "text-slate-300" : "text-slate-700")}>{module.description}</p>
+              <div className={cn("mt-6 text-sm font-medium", isDarkMode ? "text-cyan-100" : "text-cyan-900")}>Entrar no modulo →</div>
+            </button>
+          ))}
+        </section>
+      </main>
+    );
+  }
+
+  function renderStudio() {
+    return (
+      <main className="grid flex-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)_360px]">
+        <section className={cn(
+          "animate-panel-in rounded-[1.5rem] border p-5 backdrop-blur-xl",
+          isDarkMode
+            ? "border-white/10 bg-white/5"
+            : "border-white/70 bg-white/82 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.22)]",
+        )}>
+          <div className={cn("text-sm font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Arquivos e parametros</div>
+          <label className={cn(
+            "mt-4 flex cursor-pointer items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center text-sm transition",
+            isDarkMode
+              ? "border-cyan-400/35 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/15"
+              : "border-cyan-300/70 bg-cyan-50 text-cyan-900 hover:bg-cyan-100",
+          )}>
+            Selecionar arquivos .zpl ou .txt
+            <input type="file" multiple accept=".zpl,.txt,.text/plain" onChange={handleFileUpload} className="hidden" />
+          </label>
+
+          <div className="mt-5 space-y-3">
+            <label className={cn("block text-xs", isDarkMode ? "text-slate-300" : "text-slate-700")}>
+              DPMM
+              <input
+                type="number"
+                value={params.dpmm}
+                onChange={(event) => setParams((current) => ({ ...current, dpmm: Number(event.target.value) }))}
                 className={cn(
-                  "h-[62vh] w-full resize-none rounded-lg border p-3 font-mono text-xs leading-5 outline-none transition-all",
+                  "mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none",
                   isDarkMode
-                    ? "border-white/10 bg-black/30 text-slate-100 focus:border-violet-300/60 focus:ring-violet-400/20"
-                    : "border-slate-300/40 bg-white/70 text-slate-900 focus:border-violet-400/60 focus:ring-violet-300/20"
+                    ? "border-white/10 bg-black/20 text-white"
+                    : "border-slate-200 bg-white text-slate-900",
                 )}
-                placeholder="Cole seu ZPL aqui..."
               />
-              <div className="mt-2 flex items-center justify-between gap-3">
-                <div className={cn(
-                  "text-xs transition-colors duration-300",
-                  isDarkMode ? "text-slate-400" : "text-slate-500"
-                )}>
-                  Dica: ao trocar o item, o preview atualiza automaticamente.
-                </div>
-                <button
-                  onClick={() => void doRender()}
-                  disabled={!selected || isRendering || isBatching}
+            </label>
+            <label className={cn("block text-xs", isDarkMode ? "text-slate-300" : "text-slate-700")}>
+              Largura (mm)
+              <input
+                type="number"
+                value={params.widthMm}
+                onChange={(event) => setParams((current) => ({ ...current, widthMm: Number(event.target.value) }))}
+                className={cn(
+                  "mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none",
+                  isDarkMode
+                    ? "border-white/10 bg-black/20 text-white"
+                    : "border-slate-200 bg-white text-slate-900",
+                )}
+              />
+            </label>
+            <label className={cn("block text-xs", isDarkMode ? "text-slate-300" : "text-slate-700")}>
+              Altura (mm)
+              <input
+                type="number"
+                value={params.heightMm}
+                onChange={(event) => setParams((current) => ({ ...current, heightMm: Number(event.target.value) }))}
+                className={cn(
+                  "mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none",
+                  isDarkMode
+                    ? "border-white/10 bg-black/20 text-white"
+                    : "border-slate-200 bg-white text-slate-900",
+                )}
+              />
+            </label>
+            <div ref={rotationMenuRef} className={cn("block text-xs", isDarkMode ? "text-slate-300" : "text-slate-700")}>
+              <div className="mb-1">Rotacao</div>
+              <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={isRotationMenuOpen}
+                onClick={() => setIsRotationMenuOpen((current) => !current)}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-sm outline-none transition hover:-translate-y-0.5",
+                  isDarkMode
+                    ? "border-white/10 bg-black/20 text-white hover:border-cyan-300/35 hover:bg-cyan-500/10"
+                    : "border-slate-200 bg-white text-slate-900 hover:border-cyan-300 hover:bg-cyan-50",
+                )}
+              >
+                <span className="flex flex-col items-start">
+                  <span className="font-medium">{currentRotation.label}</span>
+                  <span className={cn("text-[11px]", isDarkMode ? "text-slate-400" : "text-slate-500")}>{currentRotation.description}</span>
+                </span>
+                <span className={cn("text-lg transition-transform", isRotationMenuOpen && "rotate-180", isDarkMode ? "text-cyan-200" : "text-cyan-700")}>
+                  ▾
+                </span>
+              </button>
+
+              {isRotationMenuOpen ? (
+                <div
+                  role="listbox"
                   className={cn(
-                    "rounded-md border px-3 py-2 text-sm font-medium transition-all duration-200",
+                    "animate-menu-reveal mt-3 grid gap-3 rounded-2xl border p-3 shadow-2xl",
                     isDarkMode
-                      ? "border-white/10 bg-white/10 hover:bg-white/15 hover:shadow-violet-500/10"
-                      : "border-slate-300/40 bg-slate-100/50 hover:bg-slate-200/50 hover:shadow-slate-200/20",
-                    "hover:-translate-y-0.5 hover:shadow-lg",
-                    "active:translate-y-0 active:scale-[0.99]",
-                    "focus-visible:outline-none focus:ring-2 focus:ring-violet-400/50 focus:ring-offset-2",
-                    isDarkMode ? "focus:ring-offset-black/20" : "focus:ring-offset-white/20",
-                    "disabled:cursor-not-allowed disabled:opacity-50",
+                      ? "border-cyan-400/20 bg-slate-950/88"
+                      : "border-cyan-200 bg-white/96",
                   )}
                 >
-                  Renderizar
-                </button>
-              </div>
-              {error ? (
-                <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
-                  {error}
+                  {rotationOptions.map((option) => {
+                    const isActive = option.value === params.rotation;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        role="option"
+                        aria-selected={isActive}
+                        onClick={() => {
+                          setParams((current) => ({ ...current, rotation: option.value }));
+                          setIsRotationMenuOpen(false);
+                        }}
+                        className={cn(
+                          "rounded-xl border px-4 py-3 text-left transition hover:-translate-y-0.5",
+                          isActive
+                            ? "border-cyan-300/45 bg-cyan-500/15 text-white"
+                            : isDarkMode
+                              ? "border-white/10 bg-white/5 text-slate-200 hover:border-cyan-300/25 hover:bg-cyan-500/10"
+                              : "border-slate-200 bg-slate-50 text-slate-800 hover:border-cyan-300 hover:bg-cyan-50",
+                        )}
+                      >
+                        <div className="text-sm font-semibold">{option.label}</div>
+                        <div className={cn(
+                          "mt-1 text-xs",
+                          isActive ? "text-cyan-100/80" : isDarkMode ? "text-slate-400" : "text-slate-500",
+                        )}>
+                          {option.description}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : null}
             </div>
-          </section>
+          </div>
 
-          <section className="col-span-12 lg:col-span-4">
-            <div className={cn(
-              "rounded-xl border p-3 backdrop-blur transition-all duration-200 hover:border-opacity-35",
-              isDarkMode
-                ? "border-violet-500/25 bg-violet-950/40 hover:border-violet-400/35"
-                : "border-violet-200/40 bg-violet-50/50 hover:border-violet-300/50"
-            )}>
-              <div className={cn(
-                "mb-2 text-sm font-semibold transition-colors duration-300",
-                isDarkMode ? "text-slate-100" : "text-slate-900"
-              )}>
-                Preview
-              </div>
-              <div
-                className={cn(
-                  "flex h-[70vh] items-center justify-center overflow-hidden rounded-lg border transition-colors duration-200",
+          <div className="mt-5">
+            <div className={cn("mb-2 text-sm font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Lote atual</div>
+            <div className="max-h-[380px] space-y-2 overflow-auto">
+              {items.length ? (
+                items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSelectedId(item.id)}
+                    className={cn(
+                      "w-full rounded-2xl border px-4 py-3 text-left transition",
+                      item.id === selectedId
+                        ? "border-cyan-300/50 bg-cyan-400/10"
+                        : isDarkMode
+                          ? "border-white/10 bg-black/20 hover:bg-white/5"
+                          : "border-slate-200 bg-slate-50 hover:bg-white",
+                    )}
+                  >
+                    <div className={cn("truncate text-sm font-medium", isDarkMode ? "text-white" : "text-slate-950")}>{item.name}</div>
+                    <div className={cn("mt-1 truncate text-xs", isDarkMode ? "text-slate-400" : "text-slate-500")}>{item.zpl.slice(0, 72) || "(vazio)"}</div>
+                  </button>
+                ))
+              ) : (
+                <div className={cn(
+                  "rounded-2xl border p-4 text-sm",
                   isDarkMode
-                    ? "bg-black/30"
-                    : "bg-slate-100/50",
-                  isRendering
-                    ? isDarkMode
-                      ? "border-violet-300/40"
-                      : "border-violet-400/40"
-                    : isDarkMode
-                      ? "border-white/10 hover:border-violet-300/30"
-                      : "border-slate-300/40 hover:border-violet-300/50",
+                    ? "border-white/10 bg-black/20 text-slate-400"
+                    : "border-slate-200 bg-slate-50 text-slate-500",
+                )}>
+                  Nenhum arquivo carregado ainda.
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className={cn(
+          "animate-panel-in animate-panel-delay-1 rounded-[1.5rem] border p-5 backdrop-blur-xl",
+          isDarkMode
+            ? "border-white/10 bg-white/5"
+            : "border-white/70 bg-white/82 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.22)]",
+        )}>
+          <div className="flex items-center justify-between gap-3">
+            <div className={cn("text-sm font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Editor ZPL</div>
+            <div className={cn("text-xs", isDarkMode ? "text-slate-400" : "text-slate-500")}>{selected?.name ?? "Manual.zpl"}</div>
+          </div>
+          <textarea
+            value={selected?.zpl ?? ""}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+
+              if (!selectedId) {
+                const id = makeId();
+                setItems([{ id, name: "Manual.zpl", zpl: nextValue }]);
+                setSelectedId(id);
+                return;
+              }
+
+              setItems((current) =>
+                current.map((item) => (item.id === selectedId ? { ...item, zpl: nextValue } : item)),
+              );
+            }}
+            placeholder="Cole seu ZPL aqui..."
+            className={cn(
+              "mt-4 h-[620px] w-full resize-none rounded-[1.5rem] border p-4 font-mono text-xs leading-6 outline-none",
+              isDarkMode
+                ? "border-white/10 bg-black/25 text-white"
+                : "border-slate-200 bg-white text-slate-900",
+            )}
+          />
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => void handleRender()}
+              disabled={!selected?.zpl.trim() || isRendering || isBatching}
+              className={cn(
+                "rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50",
+                isDarkMode ? "bg-cyan-400 text-slate-950" : "bg-slate-950 text-white",
+              )}
+            >
+              {isRendering ? "Renderizando..." : "Renderizar preview"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDownloadZip()}
+              disabled={!items.length || isRendering || isBatching}
+              className={cn(
+                "rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50",
+                isDarkMode
+                  ? "border border-cyan-400/30 bg-cyan-400/10 text-cyan-100"
+                  : "border border-cyan-300 bg-cyan-50 text-cyan-900",
+              )}
+            >
+              {isBatching ? "Gerando ZIP..." : "Baixar ZIP em PDF"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveModule("operations")}
+              className={cn(
+                "rounded-full border px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
+                isDarkMode
+                  ? "border-white/15 bg-white/5 text-white"
+                  : "border-slate-300 bg-white text-slate-800",
+              )}
+            >
+              Ver operacoes
+            </button>
+          </div>
+          {error ? (
+            <div className={cn(
+              "mt-4 rounded-2xl px-4 py-3 text-sm",
+              isDarkMode ? "bg-rose-500/10 text-rose-200" : "bg-rose-50 text-rose-700",
+            )}>
+              {error}
+            </div>
+          ) : null}
+        </section>
+
+        <section className={cn(
+          "animate-panel-in animate-panel-delay-2 rounded-[1.5rem] border p-5 backdrop-blur-xl",
+          isDarkMode
+            ? "border-white/10 bg-white/5"
+            : "border-white/70 bg-white/82 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.22)]",
+        )}>
+          <div className={cn("text-sm font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Preview</div>
+          <div className={cn(
+            "mt-4 flex h-[620px] items-center justify-center rounded-[1.5rem] border p-6",
+            isDarkMode
+              ? "border-white/10 bg-black/20"
+              : "border-slate-200 bg-slate-50",
+          )}>
+            {previewUrl ? (
+              <img src={previewUrl} alt="Preview do label" className="max-h-full max-w-full object-contain" />
+            ) : (
+              <div className={cn("text-center text-sm", isDarkMode ? "text-slate-400" : "text-slate-500")}>
+                {selected?.zpl.trim() ? "Clique em renderizar preview." : "Adicione um ZPL para visualizar."}
+              </div>
+            )}
+          </div>
+          <div className={cn("mt-4 text-xs", isDarkMode ? "text-slate-400" : "text-slate-500")}>Backend: {apiBase() || "mesma origem"}</div>
+        </section>
+      </main>
+    );
+  }
+
+  function renderOperations() {
+    return (
+      <main className="grid flex-1 gap-4 lg:grid-cols-[1fr_1fr]">
+        <section className={cn(
+          "animate-panel-in rounded-[1.5rem] border p-6 backdrop-blur-xl",
+          isDarkMode
+            ? "border-white/10 bg-white/5"
+            : "border-white/70 bg-white/82 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.22)]",
+        )}>
+          <div className={cn("text-xs uppercase tracking-[0.28em]", isDarkMode ? "text-cyan-200" : "text-cyan-700")}>Resumo operacional</div>
+          <div className={cn("mt-4 text-3xl font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Controle do lote atual</div>
+          <div className="mt-6 grid gap-4 md:grid-cols-4">
+            {[
+              { label: "Arquivos", value: String(items.length) },
+              { label: "Prontos", value: String(completedItems) },
+              { label: "Formato", value: `${params.widthMm} x ${params.heightMm}` },
+              { label: "Rotacao", value: `${params.rotation}°` },
+            ].map((card) => (
+              <div
+                key={card.label}
+                className={cn(
+                  "rounded-2xl border p-4",
+                  isDarkMode
+                    ? "border-white/10 bg-black/20"
+                    : "border-slate-200 bg-slate-50",
                 )}
               >
-                {previewUrl ? (
-                  <img
-                    src={previewUrl}
-                    alt="Preview do label"
-                    className={cn(
-                      "max-h-full max-w-full object-contain",
-                      "transition-transform duration-200",
-                      "hover:scale-[1.01]",
-                    )}
-                  />
-                ) : (
-                  <div className={cn(
-                    "px-6 text-center text-sm transition-colors duration-300",
-                    isDarkMode ? "text-slate-400" : "text-slate-500"
-                  )}>
-                    {selected ? "Sem preview ainda." : "Faça upload e selecione um item."}
-                  </div>
-                )}
+                <div className={cn("text-xs uppercase tracking-[0.25em]", isDarkMode ? "text-slate-400" : "text-slate-500")}>{card.label}</div>
+                <div className={cn("mt-2 text-2xl font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>{card.value}</div>
               </div>
+            ))}
+          </div>
+          <div className="mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveModule("home")}
+              className={cn(
+                "rounded-full border px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
+                isDarkMode
+                  ? "border-white/15 bg-white/5 text-white"
+                  : "border-slate-300 bg-white text-slate-800",
+              )}
+            >
+              Voltar para home
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveModule("studio")}
+              className={cn(
+                "rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
+                isDarkMode ? "bg-cyan-400 text-slate-950" : "bg-slate-950 text-white",
+              )}
+            >
+              Voltar para studio
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleDownloadZip()}
+              disabled={!items.length || isRendering || isBatching}
+              className={cn(
+                "rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50",
+                isDarkMode
+                  ? "border border-cyan-400/30 bg-cyan-400/10 text-cyan-100"
+                  : "border border-cyan-300 bg-cyan-50 text-cyan-900",
+              )}
+            >
+              {isBatching ? "Gerando ZIP..." : "Baixar ZIP em PDF"}
+            </button>
+          </div>
+        </section>
+
+        <section className={cn(
+          "animate-panel-in animate-panel-delay-1 rounded-[1.5rem] border p-6 backdrop-blur-xl",
+          isDarkMode
+            ? "border-white/10 bg-white/5"
+            : "border-white/70 bg-white/82 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.22)]",
+        )}>
+          <div className={cn("text-xs uppercase tracking-[0.28em]", isDarkMode ? "text-cyan-200" : "text-cyan-700")}>Fila de arquivos</div>
+          <div className={cn("mt-4 text-2xl font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Itens carregados</div>
+          <div className="mt-5 space-y-3">
+            {items.length ? (
+              items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(item.id);
+                    setActiveModule("studio");
+                  }}
+                  className={cn(
+                    "flex w-full items-start justify-between rounded-2xl border p-4 text-left transition",
+                    isDarkMode
+                      ? "border-white/10 bg-black/20 hover:bg-white/5"
+                      : "border-slate-200 bg-slate-50 hover:bg-white",
+                  )}
+                >
+                  <div>
+                    <div className={cn("text-sm font-medium", isDarkMode ? "text-white" : "text-slate-950")}>{item.name}</div>
+                    <div className={cn("mt-1 text-xs", isDarkMode ? "text-slate-400" : "text-slate-500")}>{item.zpl.slice(0, 90) || "(vazio)"}</div>
+                  </div>
+                  <span className={cn(
+                    "rounded-full px-3 py-1 text-xs",
+                    isDarkMode ? "bg-cyan-400/10 text-cyan-100" : "bg-cyan-100 text-cyan-900",
+                  )}>Abrir</span>
+                </button>
+              ))
+            ) : (
               <div className={cn(
-                "mt-2 text-xs transition-colors duration-300",
-                isDarkMode ? "text-slate-400" : "text-slate-500"
+                "rounded-2xl border p-5 text-sm",
+                isDarkMode
+                  ? "border-white/10 bg-black/20 text-slate-400"
+                  : "border-slate-200 bg-slate-50 text-slate-500",
               )}>
-                Backend: <span className="font-mono">{apiBase()}</span>
+                Nenhum item no lote. Use o Studio ZPL para adicionar arquivos.
+              </div>
+            )}
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "min-h-screen overflow-hidden",
+        isDarkMode ? "bg-[linear-gradient(180deg,#04111f_0%,#071826_45%,#03101a_100%)] text-slate-100" : "bg-slate-100 text-slate-900",
+      )}
+    >
+      <ParticleField isDarkMode={isDarkMode} />
+      <div className="pointer-events-none absolute left-[-80px] top-10 h-72 w-72 rounded-full bg-cyan-400/15 blur-3xl animate-aurora-float" />
+      <div className="pointer-events-none absolute right-[-40px] top-40 h-80 w-80 rounded-full bg-sky-400/10 blur-3xl animate-soft-pulse" />
+
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 md:px-6">
+        <header className={cn(
+          "animate-panel-in mb-6 flex flex-col gap-4 rounded-[1.75rem] border px-5 py-5 backdrop-blur-xl md:flex-row md:items-center md:justify-between",
+          isDarkMode
+            ? "border-white/10 bg-white/5"
+            : "border-white/70 bg-white/78 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.25)]",
+        )}>
+          <div className="flex items-center gap-4">
+            <div className={cn(
+              "logo-badge flex h-16 w-16 items-center justify-center rounded-2xl border p-2",
+              isDarkMode
+                ? "border-cyan-400/20 bg-white/5"
+                : "border-cyan-200/80 bg-white/90",
+            )}>
+              <img
+                src="/logo-alquimia-2.png"
+                alt="Logo Alquimia"
+                className="logo-mark h-full w-full object-contain"
+              />
+            </div>
+            <div>
+              <div className={cn("text-xs font-semibold tracking-[0.32em]", isDarkMode ? "text-cyan-200" : "text-cyan-700")}>ALQUIMIA STUDIO</div>
+              <div className={cn("mt-2 text-2xl font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Painel principal</div>
+              <div className={cn("mt-1 text-sm", isDarkMode ? "text-slate-300" : "text-slate-600")}>
+                Home animada com menu claro para mudar de modulo.
               </div>
             </div>
-          </section>
-        </main>
+          </div>
+
+          <div className="flex flex-col gap-3 md:items-end">
+            <nav className="flex flex-wrap gap-2">
+              {modules.map((module) => (
+                <button
+                  key={module.id}
+                  type="button"
+                  onClick={() => setActiveModule(module.id)}
+                  className={cn(
+                    "rounded-full border px-4 py-2 text-sm font-medium transition hover:-translate-y-0.5",
+                    activeModule === module.id
+                      ? isDarkMode
+                        ? "border-cyan-300/50 bg-cyan-400/15 text-white"
+                        : "border-cyan-400/60 bg-cyan-100 text-cyan-950"
+                      : isDarkMode
+                        ? "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
+                        : "border-slate-300/70 bg-white/90 text-slate-800 hover:bg-white",
+                  )}
+                >
+                  {module.label}
+                </button>
+              ))}
+            </nav>
+
+            <div className="flex items-center gap-3">
+              <span className={cn(
+                "rounded-full border px-3 py-1 text-xs",
+                isDarkMode
+                  ? "border-white/10 bg-white/5 text-slate-300"
+                  : "border-slate-300/60 bg-white text-slate-600",
+              )}>
+                {isRendering ? "Renderizando..." : isBatching ? "Gerando ZIP..." : "Sistema ativo"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsDarkMode((current) => !current)}
+                className={cn(
+                  "inline-flex h-10 w-16 items-center rounded-full p-1 transition",
+                  isDarkMode ? "bg-cyan-600" : "bg-slate-300",
+                )}
+              >
+                <span
+                  className={cn(
+                    "h-8 w-8 rounded-full bg-white shadow transition-transform",
+                    isDarkMode ? "translate-x-0" : "translate-x-6",
+                  )}
+                />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {activeModule === "home"
+          ? renderHome()
+          : activeModule === "studio"
+            ? renderStudio()
+            : renderOperations()}
       </div>
     </div>
   );

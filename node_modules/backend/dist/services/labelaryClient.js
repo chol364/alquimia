@@ -1,24 +1,49 @@
-import zplRenderer from "zpl-renderer-js";
 import { PDFDocument } from "pdf-lib";
-function inchesToMm(inches) {
-    return inches * 25.4;
+import pLimit from "p-limit";
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+// O renderer WASM do Go nao tolera concorrencia real.
+const globalLimit = pLimit(1);
+let cachedRenderer = null;
+function resetRenderer() {
+    cachedRenderer = null;
+}
+async function getRenderer() {
+    if (cachedRenderer)
+        return cachedRenderer;
+    const mod = require("zpl-renderer-js");
+    cachedRenderer = mod.default ?? mod;
+    return cachedRenderer;
+}
+function mmToInches(mm) {
+    return mm / 25.4;
+}
+function validateDimensions(input) {
+    const maxWidthMm = 320;
+    const maxHeightMm = 320;
+    if (input.widthMm <= 0 || input.heightMm <= 0) {
+        throw new Error("As dimensoes da etiqueta devem ser maiores que zero.");
+    }
+    if (input.widthMm > maxWidthMm || input.heightMm > maxHeightMm) {
+        throw new Error(`Dimensoes muito grandes: ${input.widthMm}x${input.heightMm}mm. Maximo permitido: ${maxWidthMm}x${maxHeightMm}mm.`);
+    }
 }
 async function zplToPngBytes(input) {
-    const mod = zplRenderer;
+    validateDimensions(input);
+    const mod = await getRenderer();
     const readyPromise = mod.ready ?? mod;
     const { api } = await readyPromise;
-    const widthMm = inchesToMm(input.widthIn);
-    const heightMm = inchesToMm(input.heightIn);
-    const base64 = await api.zplToBase64Async(input.zpl, widthMm, heightMm, input.dpmm);
+    const base64 = await api.zplToBase64Async(input.zpl, input.widthMm, input.heightMm, input.dpmm);
     return Buffer.from(base64, "base64");
 }
 async function zplToPngBytesMultiple(input) {
-    const mod = zplRenderer;
+    validateDimensions(input);
+    const mod = await getRenderer();
     const readyPromise = mod.ready ?? mod;
     const { api } = await readyPromise;
-    const widthMm = inchesToMm(input.widthIn);
-    const heightMm = inchesToMm(input.heightIn);
-    const base64Array = await api.zplToBase64MultipleAsync(input.zpl, widthMm, heightMm, input.dpmm);
+    const widthIn = mmToInches(input.widthMm);
+    const heightIn = mmToInches(input.heightMm);
+    const base64Array = await api.zplToBase64MultipleAsync(input.zpl, widthIn, heightIn, input.dpmm);
     return base64Array.map((b64) => Buffer.from(b64, "base64"));
 }
 async function pngToPdfBytes(pngBytes) {
@@ -37,16 +62,39 @@ async function pngToPdfBytes(pngBytes) {
     return new Uint8Array(pdfBytes);
 }
 export async function renderLabel(input) {
-    if (input.format === "png") {
-        // Para preview, usamos apenas o primeiro label.
-        const png = await zplToPngBytes(input);
-        return png;
+    const maxRetries = 3;
+    const retryDelay = 1500;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await globalLimit(async () => {
+                if (input.format === "png") {
+                    return await zplToPngBytes(input);
+                }
+                const allPngs = await zplToPngBytesMultiple(input);
+                if (!allPngs.length) {
+                    throw new Error("Nenhuma etiqueta encontrada no ZPL.");
+                }
+                return await pngToPdfBytes(allPngs);
+            });
+        }
+        catch (err) {
+            const message = String(err?.message ?? "");
+            const isRecoverableRendererCrash = message.includes("Go program has already exited") ||
+                message.includes("reading 'exports'") ||
+                message.includes("out of memory");
+            if (isRecoverableRendererCrash) {
+                resetRenderer();
+            }
+            if (isRecoverableRendererCrash && attempt < maxRetries) {
+                console.warn(`[renderLabel] Renderizador falhou (tentativa ${attempt}/${maxRetries}). Aguardando ${retryDelay}ms...`);
+                await new Promise((resolve) => setTimeout(resolve, retryDelay));
+                continue;
+            }
+            if (isRecoverableRendererCrash) {
+                throw new Error("O motor de renderizacao falhou apos varias tentativas. Revise as dimensoes da etiqueta e tente novamente.");
+            }
+            throw err;
+        }
     }
-    // Para PDF (lote), renderizamos TODAS as etiquetas do ZPL
-    // em páginas separadas dentro de um único PDF.
-    const allPngs = await zplToPngBytesMultiple(input);
-    if (!allPngs.length) {
-        throw new Error("Nenhuma etiqueta encontrada no ZPL");
-    }
-    return pngToPdfBytes(allPngs);
+    throw new Error("Erro desconhecido ao renderizar.");
 }

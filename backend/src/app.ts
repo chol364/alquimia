@@ -1,56 +1,67 @@
-import Fastify from "fastify";
-import cors from "@fastify/cors";
-import multipart from "@fastify/multipart";
-import fastifyStatic from "@fastify/static";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-import { renderRoutes } from "./routes/renderRoutes.js";
-import { batchRoutes } from "./routes/batchRoutes.js";
-
-const app = Fastify({
-  logger: {
-    level: process.env.LOG_LEVEL ?? "info",
-  },
-  bodyLimit: Number(process.env.BODY_LIMIT ?? 20_000_000),
-});
+import Fastify from 'fastify';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fastifyStatic from '@fastify/static';
+import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
+import { renderRoutes } from './routes/renderRoutes.js';
+import { batchRoutes } from './routes/batchRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-await app.register(cors, {
-  origin: true,
-});
+async function main() {
+  const app = Fastify({
+    logger: {
+      level: process.env.LOG_LEVEL ?? 'info',
+    },
+    bodyLimit: Number(process.env.BODY_LIMIT ?? 20_000_000),
+  });
 
-await app.register(multipart, {
-  limits: {
-    fileSize: Number(process.env.MAX_ZPL_BYTES ?? 20_000_000),
-    files: Number(process.env.MAX_FILES ?? 2000),
-  },
-});
+  const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
+  const HOST = process.env.HOST ?? '0.0.0.0';
 
-app.get("/api/health", async () => {
-  return { ok: true };
-});
+  // Register plugins
+  await app.register(cors, { origin: true });
+  await app.register(multipart, {
+    limits: {
+      fileSize: Number(process.env.MAX_ZPL_BYTES ?? 20_000_000),
+      files: Number(process.env.MAX_FILES ?? 2000),
+    },
+  });
 
-await app.register(renderRoutes);
-await app.register(batchRoutes);
+  // API routes
+  await app.register(renderRoutes);
+  await app.register(batchRoutes);
 
-await app.register(fastifyStatic, {
-  root: path.join(__dirname, "../../frontend/dist"),
-  prefix: "/",
-});
+  // Healthcheck
+  app.get('/api/health', async () => ({ status: 'ok' }));
 
-app.setNotFoundHandler((request, reply) => {
-  if (request.raw.url?.startsWith("/api")) {
-    reply.status(404).send({ error: "Rota da API não encontrada" });
-    return;
+  // Serve frontend build (only after API routes)
+  await app.register(fastifyStatic, {
+    root: path.resolve(__dirname, '../../frontend/dist'),
+    prefix: '/',
+    wildcard: false,
+    decorateReply: false,
+    index: ['index.html']
+  });
+
+  // SPA fallback (não quebrar /api)
+  app.setNotFoundHandler((request, reply) => {
+    if (request.raw.url && request.raw.url.startsWith('/api')) {
+      reply.status(404).send({ error: 'Not found' });
+    } else {
+      reply.type('text/html').sendFile('index.html');
+    }
+  });
+
+  try {
+    await app.listen({ port: PORT, host: HOST });
+    console.log(`Server running at http://${HOST}:${PORT}`);
+  } catch (err) {
+    console.error(err);
+    process.exit(1);
   }
+}
 
-  reply.sendFile("index.html");
-});
-
-const port = Number(process.env.PORT ?? 4000);
-const host = process.env.HOST ?? "0.0.0.0";
-
-await app.listen({ port, host });
+main();

@@ -8,8 +8,10 @@ import { extractZplsFromTextFile, extractZplsFromZip } from "../services/zplBatc
 export const batchRoutes: FastifyPluginAsync = async (app) => {
   const paramsSchema = z.object({
     dpmm: z.coerce.number().int().min(6).max(24).default(8),
-    widthIn: z.coerce.number().positive().default(4),
-    heightIn: z.coerce.number().positive().default(6),
+    widthMm: z.coerce.number().positive().default(100),
+    heightMm: z.coerce.number().positive().default(150),
+    widthIn: z.coerce.number().positive().optional(),
+    heightIn: z.coerce.number().positive().optional(),
     rotation: z
       .coerce
       .number()
@@ -85,8 +87,8 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
               format: "pdf",
               zpl: it.zpl,
               dpmm: params.dpmm,
-              widthIn: params.widthIn,
-              heightIn: params.heightIn,
+              widthMm: params.widthMm ?? params.widthIn ?? 100,
+              heightMm: params.heightMm ?? params.heightIn ?? 150,
               index: 0,
               rotation: params.rotation as 0 | 90 | 180 | 270,
               darkness: params.darkness,
@@ -111,4 +113,3 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(zipBuf);
   });
 };
-

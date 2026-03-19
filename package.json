@@ -1,21 +1,13 @@
 {
   "name": "projeto-labelary2.0",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "private": true,
-  "type": "commonjs",
   "workspaces": [
-    "frontend",
-    "backend"
+    "backend",
+    "frontend"
   ],
   "scripts": {
-    "dev": "npm -w backend run dev",
-    "dev:all": "npm -w backend run dev & npm -w frontend run dev",
-    "build": "npm install -w frontend && npm install -w backend && npm -w frontend run build && npm -w backend run build",
-    "start": "npm -w backend run start"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+    "install-all": "npm install --workspaces",
+    "build": "npm run build --workspaces",
+    "start": "npm --workspace backend start"
+  }
 }

@@ -391,7 +391,7 @@ export default function App() {
               "mt-6 max-w-4xl text-4xl font-semibold leading-tight md:text-6xl",
               isDarkMode ? "text-white" : "text-slate-950",
             )}>
-              alquimia studio foi criado para facilitar a conversão das suas etiquetas do ecommerce.
+              Alquimia studio foi criado para facilitar a conversão das suas etiquetas do ecommerce.
             </h1>
             <p className={cn(
               "mt-5 max-w-2xl text-base leading-7 md:text-lg",
@@ -937,7 +937,7 @@ export default function App() {
               <div className={cn("text-xs font-semibold tracking-[0.32em]", isDarkMode ? "text-cyan-200" : "text-cyan-700")}>ALQUIMIA STUDIO</div>
               <div className={cn("mt-2 text-2xl font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Painel principal</div>
               <div className={cn("mt-1 text-sm", isDarkMode ? "text-slate-300" : "text-slate-600")}>
-                Home animada com menu claro para mudar de modulo.
+                Alquimia Studio focado em ZPL.
               </div>
             </div>
           </div>

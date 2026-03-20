@@ -1,4 +1,4 @@
-﻿import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type ModuleId = "home" | "studio" | "operations";
 
@@ -48,6 +48,12 @@ const rotationOptions: Array<{ value: RenderParams["rotation"]; label: string; d
   { value: 90, label: "90°", description: "Horizontal" },
   { value: 180, label: "180°", description: "Invertida" },
   { value: 270, label: "270°", description: "Lateral" },
+];
+
+const operationalHighlights = [
+  { value: "Preview cinematografico", note: "Render com scanner luminoso e entrada progressiva" },
+  { value: "Lote responsivo", note: "Cards com profundidade e feedback imediato" },
+  { value: "Fluxo continuo", note: "Troca entre modulos sem quebra visual" },
 ];
 
 function apiBase(): string {
@@ -368,17 +374,19 @@ export default function App() {
   const totalCharacters = items.reduce((total, item) => total + item.zpl.length, 0);
   const currentRotation =
     rotationOptions.find((option) => option.value === params.rotation) ?? rotationOptions[0];
+  const completionRatio = items.length ? Math.round((completedItems / items.length) * 100) : 0;
 
   function renderHome() {
     return (
       <main className="flex flex-1 flex-col gap-6">
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
           <div className={cn(
-            "animate-panel-in rounded-[2rem] border p-8 backdrop-blur-xl",
+            "animate-panel-in story-panel rounded-[2rem] border p-8 backdrop-blur-xl",
             isDarkMode
               ? "border-white/10 bg-white/5"
               : "border-white/70 bg-white/75 shadow-[0_30px_90px_-50px_rgba(14,165,233,0.28)]",
           )}>
+            <div className="panel-shine" />
             <div className={cn(
               "inline-flex rounded-full border px-4 py-2 text-xs uppercase tracking-[0.28em]",
               isDarkMode
@@ -405,7 +413,7 @@ export default function App() {
                 type="button"
                 onClick={() => setActiveModule("studio")}
                 className={cn(
-                  "rounded-full px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
+                  "magnetic-button rounded-full px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
                   isDarkMode
                     ? "bg-cyan-400 text-slate-950"
                     : "bg-slate-950 text-white shadow-[0_20px_60px_-20px_rgba(15,23,42,0.35)]",
@@ -417,7 +425,7 @@ export default function App() {
                 type="button"
                 onClick={() => setActiveModule("operations")}
                 className={cn(
-                  "rounded-full border px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
+                  "magnetic-button rounded-full border px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
                   isDarkMode
                     ? "border-white/15 bg-white/5 text-white hover:bg-white/10"
                     : "border-slate-300/60 bg-white text-slate-800 hover:bg-slate-50",
@@ -426,10 +434,29 @@ export default function App() {
                 Ir para operacoes
               </button>
             </div>
+            <div className="mt-8 grid gap-3 md:grid-cols-3">
+              {operationalHighlights.map((highlight, index) => (
+                <div
+                  key={highlight.value}
+                  className={cn(
+                    "glass-chip animate-panel-in rounded-[1.35rem] border px-4 py-4",
+                    isDarkMode ? "border-white/10 bg-white/5" : "border-white/70 bg-white/75",
+                  )}
+                  style={{ animationDelay: `${220 + index * 90}ms` }}
+                >
+                  <div className={cn("text-sm font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>
+                    {highlight.value}
+                  </div>
+                  <div className={cn("mt-2 text-xs leading-5", isDarkMode ? "text-slate-300" : "text-slate-600")}>
+                    {highlight.note}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className={cn(
-            "animate-panel-in animate-panel-delay-1 rounded-[2rem] border p-8 backdrop-blur-xl",
+            "animate-panel-in animate-panel-delay-1 story-panel rounded-[2rem] border p-8 backdrop-blur-xl",
             isDarkMode
               ? "border-cyan-400/20 bg-slate-950/70"
               : "border-cyan-200/70 bg-white/75 shadow-[0_30px_90px_-50px_rgba(34,211,238,0.3)]",
@@ -461,7 +488,7 @@ export default function App() {
                     <div
                       key={card.label}
                       className={cn(
-                        "rounded-2xl border p-4",
+                        "tilt-card rounded-2xl border p-4",
                         isDarkMode
                           ? "border-white/10 bg-white/5"
                           : "border-white/80 bg-white/70",
@@ -472,6 +499,14 @@ export default function App() {
                       <div className={cn("mt-1 text-sm", isDarkMode ? "text-slate-300" : "text-slate-600")}>{card.note}</div>
                     </div>
                   ))}
+                  <div className="aurora-bars mt-2">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </div>
                 </div>
               </div>
             </div>
@@ -485,7 +520,7 @@ export default function App() {
               type="button"
               onClick={() => setActiveModule(module.id)}
               className={cn(
-                "animate-panel-in rounded-[1.5rem] border p-6 text-left transition hover:-translate-y-1",
+                "animate-panel-in tilt-card story-panel rounded-[1.5rem] border p-6 text-left transition hover:-translate-y-1",
                 isDarkMode
                   ? "border-white/10 bg-white/5 hover:bg-white/10"
                   : "border-slate-200/90 bg-white/92 hover:bg-white shadow-[0_24px_80px_-44px_rgba(8,145,178,0.34)]",
@@ -507,14 +542,15 @@ export default function App() {
     return (
       <main className="grid flex-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)_360px]">
         <section className={cn(
-          "animate-panel-in rounded-[1.5rem] border p-5 backdrop-blur-xl",
+          "animate-panel-in story-panel rounded-[1.5rem] border p-5 backdrop-blur-xl",
           isDarkMode
             ? "border-white/10 bg-white/5"
             : "border-white/70 bg-white/82 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.22)]",
         )}>
+          <div className="panel-shine" />
           <div className={cn("text-sm font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Arquivos e parametros</div>
           <label className={cn(
-            "mt-4 flex cursor-pointer items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center text-sm transition",
+            "upload-zone mt-4 flex cursor-pointer items-center justify-center rounded-2xl border border-dashed px-4 py-6 text-center text-sm transition",
             isDarkMode
               ? "border-cyan-400/35 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/15"
               : "border-cyan-300/70 bg-cyan-50 text-cyan-900 hover:bg-cyan-100",
@@ -645,7 +681,7 @@ export default function App() {
                     type="button"
                     onClick={() => setSelectedId(item.id)}
                     className={cn(
-                      "w-full rounded-2xl border px-4 py-3 text-left transition",
+                      "tilt-card w-full rounded-2xl border px-4 py-3 text-left transition",
                       item.id === selectedId
                         ? "border-cyan-300/50 bg-cyan-400/10"
                         : isDarkMode
@@ -672,11 +708,12 @@ export default function App() {
         </section>
 
         <section className={cn(
-          "animate-panel-in animate-panel-delay-1 rounded-[1.5rem] border p-5 backdrop-blur-xl",
+          "animate-panel-in animate-panel-delay-1 story-panel rounded-[1.5rem] border p-5 backdrop-blur-xl",
           isDarkMode
             ? "border-white/10 bg-white/5"
             : "border-white/70 bg-white/82 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.22)]",
         )}>
+          <div className="panel-shine" />
           <div className="flex items-center justify-between gap-3">
             <div className={cn("text-sm font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Editor ZPL</div>
             <div className={cn("text-xs", isDarkMode ? "text-slate-400" : "text-slate-500")}>{selected?.name ?? "Manual.zpl"}</div>
@@ -711,7 +748,7 @@ export default function App() {
               onClick={() => void handleRender()}
               disabled={!selected?.zpl.trim() || isRendering || isBatching}
               className={cn(
-                "rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50",
+                "magnetic-button rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50",
                 isDarkMode ? "bg-cyan-400 text-slate-950" : "bg-slate-950 text-white",
               )}
             >
@@ -722,7 +759,7 @@ export default function App() {
               onClick={() => void handleDownloadZip()}
               disabled={!items.length || isRendering || isBatching}
               className={cn(
-                "rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50",
+                "magnetic-button rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50",
                 isDarkMode
                   ? "border border-cyan-400/30 bg-cyan-400/10 text-cyan-100"
                   : "border border-cyan-300 bg-cyan-50 text-cyan-900",
@@ -734,7 +771,7 @@ export default function App() {
               type="button"
               onClick={() => setActiveModule("operations")}
               className={cn(
-                "rounded-full border px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
+                "magnetic-button rounded-full border px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
                 isDarkMode
                   ? "border-white/15 bg-white/5 text-white"
                   : "border-slate-300 bg-white text-slate-800",
@@ -754,27 +791,46 @@ export default function App() {
         </section>
 
         <section className={cn(
-          "animate-panel-in animate-panel-delay-2 rounded-[1.5rem] border p-5 backdrop-blur-xl",
+          "animate-panel-in animate-panel-delay-2 story-panel rounded-[1.5rem] border p-5 backdrop-blur-xl",
           isDarkMode
             ? "border-white/10 bg-white/5"
             : "border-white/70 bg-white/82 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.22)]",
         )}>
+          <div className="panel-shine" />
           <div className={cn("text-sm font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Preview</div>
           <div className={cn(
-            "mt-4 flex h-[620px] items-center justify-center rounded-[1.5rem] border p-6",
+            "preview-stage mt-4 flex h-[620px] items-center justify-center rounded-[1.5rem] border p-6",
             isDarkMode
               ? "border-white/10 bg-black/20"
               : "border-slate-200 bg-slate-50",
           )}>
             {previewUrl ? (
-              <img src={previewUrl} alt="Preview do label" className="max-h-full max-w-full object-contain" />
+              <div key={previewUrl} className="preview-shell animate-preview-in">
+                <div className="preview-glow" />
+                <div className="preview-scanline" />
+                <img src={previewUrl} alt="Preview do label" className="preview-image max-h-full max-w-full object-contain" />
+              </div>
             ) : (
               <div className={cn("text-center text-sm", isDarkMode ? "text-slate-400" : "text-slate-500")}>
                 {selected?.zpl.trim() ? "Clique em renderizar preview." : "Adicione um ZPL para visualizar."}
               </div>
             )}
           </div>
-          <div className={cn("mt-4 text-xs", isDarkMode ? "text-slate-400" : "text-slate-500")}>Backend: {apiBase() || "mesma origem"}</div>
+          <div className="mt-4 space-y-3">
+            <div className={cn("text-xs", isDarkMode ? "text-slate-400" : "text-slate-500")}>Backend: {apiBase() || "mesma origem"}</div>
+            <div className={cn(
+              "rounded-2xl border p-3",
+              isDarkMode ? "border-white/10 bg-black/20" : "border-slate-200 bg-white/80",
+            )}>
+              <div className="flex items-center justify-between gap-3">
+                <span className={cn("text-xs uppercase tracking-[0.25em]", isDarkMode ? "text-cyan-100" : "text-cyan-800")}>Pronto para exportar</span>
+                <span className={cn("text-sm font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>{completionRatio}%</span>
+              </div>
+              <div className={cn("progress-rail mt-3", isDarkMode ? "bg-white/10" : "bg-slate-200")}>
+                <span className="progress-fill" style={{ width: `${completionRatio}%` }} />
+              </div>
+            </div>
+          </div>
         </section>
       </main>
     );
@@ -784,11 +840,12 @@ export default function App() {
     return (
       <main className="grid flex-1 gap-4 lg:grid-cols-[1fr_1fr]">
         <section className={cn(
-          "animate-panel-in rounded-[1.5rem] border p-6 backdrop-blur-xl",
+          "animate-panel-in story-panel rounded-[1.5rem] border p-6 backdrop-blur-xl",
           isDarkMode
             ? "border-white/10 bg-white/5"
             : "border-white/70 bg-white/82 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.22)]",
         )}>
+          <div className="panel-shine" />
           <div className={cn("text-xs uppercase tracking-[0.28em]", isDarkMode ? "text-cyan-200" : "text-cyan-700")}>Resumo operacional</div>
           <div className={cn("mt-4 text-3xl font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Controle do lote atual</div>
           <div className="mt-6 grid gap-4 md:grid-cols-4">
@@ -801,7 +858,7 @@ export default function App() {
               <div
                 key={card.label}
                 className={cn(
-                  "rounded-2xl border p-4",
+                  "tilt-card rounded-2xl border p-4",
                   isDarkMode
                     ? "border-white/10 bg-black/20"
                     : "border-slate-200 bg-slate-50",
@@ -817,7 +874,7 @@ export default function App() {
               type="button"
               onClick={() => setActiveModule("home")}
               className={cn(
-                "rounded-full border px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
+                "magnetic-button rounded-full border px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
                 isDarkMode
                   ? "border-white/15 bg-white/5 text-white"
                   : "border-slate-300 bg-white text-slate-800",
@@ -829,7 +886,7 @@ export default function App() {
               type="button"
               onClick={() => setActiveModule("studio")}
               className={cn(
-                "rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
+                "magnetic-button rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5",
                 isDarkMode ? "bg-cyan-400 text-slate-950" : "bg-slate-950 text-white",
               )}
             >
@@ -840,7 +897,7 @@ export default function App() {
               onClick={() => void handleDownloadZip()}
               disabled={!items.length || isRendering || isBatching}
               className={cn(
-                "rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50",
+                "magnetic-button rounded-full px-5 py-3 text-sm font-semibold transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-50",
                 isDarkMode
                   ? "border border-cyan-400/30 bg-cyan-400/10 text-cyan-100"
                   : "border border-cyan-300 bg-cyan-50 text-cyan-900",
@@ -852,11 +909,12 @@ export default function App() {
         </section>
 
         <section className={cn(
-          "animate-panel-in animate-panel-delay-1 rounded-[1.5rem] border p-6 backdrop-blur-xl",
+          "animate-panel-in animate-panel-delay-1 story-panel rounded-[1.5rem] border p-6 backdrop-blur-xl",
           isDarkMode
             ? "border-white/10 bg-white/5"
             : "border-white/70 bg-white/82 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.22)]",
         )}>
+          <div className="panel-shine" />
           <div className={cn("text-xs uppercase tracking-[0.28em]", isDarkMode ? "text-cyan-200" : "text-cyan-700")}>Fila de arquivos</div>
           <div className={cn("mt-4 text-2xl font-semibold", isDarkMode ? "text-white" : "text-slate-950")}>Itens carregados</div>
           <div className="mt-5 space-y-3">
@@ -870,7 +928,7 @@ export default function App() {
                     setActiveModule("studio");
                   }}
                   className={cn(
-                    "flex w-full items-start justify-between rounded-2xl border p-4 text-left transition",
+                    "tilt-card flex w-full items-start justify-between rounded-2xl border p-4 text-left transition",
                     isDarkMode
                       ? "border-white/10 bg-black/20 hover:bg-white/5"
                       : "border-slate-200 bg-slate-50 hover:bg-white",
@@ -910,16 +968,21 @@ export default function App() {
       )}
     >
       <ParticleField isDarkMode={isDarkMode} />
-      <div className="pointer-events-none absolute left-[-80px] top-10 h-72 w-72 rounded-full bg-cyan-400/15 blur-3xl animate-aurora-float" />
-      <div className="pointer-events-none absolute right-[-40px] top-40 h-80 w-80 rounded-full bg-sky-400/10 blur-3xl animate-soft-pulse" />
+      <div className="pointer-events-none absolute inset-0 opacity-80">
+        <div className="cosmic-grid" />
+        <div className="absolute left-[-80px] top-10 h-72 w-72 rounded-full bg-cyan-400/15 blur-3xl animate-aurora-float" />
+        <div className="absolute right-[-40px] top-40 h-80 w-80 rounded-full bg-sky-400/10 blur-3xl animate-soft-pulse" />
+        <div className="absolute bottom-[-80px] left-1/3 h-96 w-96 -translate-x-1/2 rounded-full bg-emerald-300/10 blur-3xl animate-aurora-drift" />
+      </div>
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-6 md:px-6">
         <header className={cn(
-          "animate-panel-in mb-6 flex flex-col gap-4 rounded-[1.75rem] border px-5 py-5 backdrop-blur-xl md:flex-row md:items-center md:justify-between",
+          "animate-panel-in story-panel mb-6 flex flex-col gap-4 rounded-[1.75rem] border px-5 py-5 backdrop-blur-xl md:flex-row md:items-center md:justify-between",
           isDarkMode
             ? "border-white/10 bg-white/5"
             : "border-white/70 bg-white/78 shadow-[0_20px_60px_-40px_rgba(14,165,233,0.25)]",
         )}>
+          <div className="panel-shine" />
           <div className="flex items-center gap-4">
             <div className={cn(
               "logo-badge flex h-16 w-16 items-center justify-center rounded-2xl border p-2",
@@ -967,7 +1030,7 @@ export default function App() {
 
             <div className="flex items-center gap-3">
               <span className={cn(
-                "rounded-full border px-3 py-1 text-xs",
+                "animate-status-glow rounded-full border px-3 py-1 text-xs",
                 isDarkMode
                   ? "border-white/10 bg-white/5 text-slate-300"
                   : "border-slate-300/60 bg-white text-slate-600",
@@ -993,11 +1056,13 @@ export default function App() {
           </div>
         </header>
 
-        {activeModule === "home"
-          ? renderHome()
-          : activeModule === "studio"
-            ? renderStudio()
-            : renderOperations()}
+        <div key={activeModule} className="module-stage animate-module-stage">
+          {activeModule === "home"
+            ? renderHome()
+            : activeModule === "studio"
+              ? renderStudio()
+              : renderOperations()}
+        </div>
       </div>
     </div>
   );

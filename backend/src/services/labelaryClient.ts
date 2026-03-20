@@ -34,10 +34,6 @@ export type RenderLabelInput = {
   darkness?: number;
 };
 
-function mmToInches(mm: number): number {
-  return mm / 25.4;
-}
-
 function validateDimensions(input: RenderLabelInput): void {
   const maxWidthMm = 320;
   const maxHeightMm = 320;
@@ -71,13 +67,10 @@ async function zplToPngBytesMultiple(input: RenderLabelInput): Promise<Uint8Arra
   const readyPromise: Promise<{ api: any }> = mod.ready ?? mod;
   const { api } = await readyPromise;
 
-  const widthIn = mmToInches(input.widthMm);
-  const heightIn = mmToInches(input.heightMm);
-
   const base64Array: string[] = await api.zplToBase64MultipleAsync(
     input.zpl,
-    widthIn,
-    heightIn,
+    input.widthMm,
+    input.heightMm,
     input.dpmm,
   );
 

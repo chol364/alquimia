@@ -15,9 +15,6 @@ async function getRenderer() {
     cachedRenderer = mod.default ?? mod;
     return cachedRenderer;
 }
-function mmToInches(mm) {
-    return mm / 25.4;
-}
 function validateDimensions(input) {
     const maxWidthMm = 320;
     const maxHeightMm = 320;
@@ -41,9 +38,7 @@ async function zplToPngBytesMultiple(input) {
     const mod = await getRenderer();
     const readyPromise = mod.ready ?? mod;
     const { api } = await readyPromise;
-    const widthIn = mmToInches(input.widthMm);
-    const heightIn = mmToInches(input.heightMm);
-    const base64Array = await api.zplToBase64MultipleAsync(input.zpl, widthIn, heightIn, input.dpmm);
+    const base64Array = await api.zplToBase64MultipleAsync(input.zpl, input.widthMm, input.heightMm, input.dpmm);
     return base64Array.map((b64) => Buffer.from(b64, "base64"));
 }
 async function pngToPdfBytes(pngBytes) {

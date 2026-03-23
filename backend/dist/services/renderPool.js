@@ -3,7 +3,7 @@ import { Worker } from "node:worker_threads";
 function resolveWorkerCount(requestedConcurrency, taskCount) {
     const cpuCount = typeof os.availableParallelism === "function" ? os.availableParallelism() : os.cpus().length;
     const safeCpuCount = Math.max(1, cpuCount - 1);
-    return Math.max(1, Math.min(requestedConcurrency, taskCount, safeCpuCount, 4));
+    return Math.max(1, Math.min(requestedConcurrency, taskCount, safeCpuCount, 6));
 }
 export async function renderBatchWithWorkers(tasks, requestedConcurrency) {
     if (!tasks.length)

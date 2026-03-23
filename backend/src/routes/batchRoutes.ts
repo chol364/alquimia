@@ -1,9 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import pLimit from "p-limit";
 import AdmZip from "adm-zip";
-import { renderLabel } from "../services/labelaryClient.js";
 import { extractZplsFromTextFile, extractZplsFromZip } from "../services/zplBatchService.js";
+import { renderBatchWithWorkers } from "../services/renderPool.js";
 
 export const batchRoutes: FastifyPluginAsync = async (app) => {
   const paramsSchema = z.object({
@@ -78,34 +77,30 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
       return { error: `Muitos arquivos (${filtered.length}). Limite: ${maxFiles}` };
     }
 
-    const limit = pLimit(params.concurrency);
-    const results = await Promise.all(
-      filtered.map((it, idx) =>
-        limit(async () => {
-          try {
-            const pdf = await renderLabel({
-              format: "pdf",
-              zpl: it.zpl,
-              dpmm: params.dpmm,
-              widthMm: params.widthMm ?? params.widthIn ?? 100,
-              heightMm: params.heightMm ?? params.heightIn ?? 150,
-              index: 0,
-              rotation: params.rotation as 0 | 90 | 180 | 270,
-              darkness: params.darkness,
-            });
-            const safeBase = it.name.replace(/\.(zpl|txt)$/i, "");
-            const outName = `${String(idx + 1).padStart(3, "0")}-${safeBase}.pdf`;
-            return { outName, pdf };
-          } catch (err: any) {
-            console.error(`Erro ao renderizar label [${it.name}]:`, err.message);
-            throw err;
-          }
-        }),
-      ),
+    const results = await renderBatchWithWorkers(
+      filtered.map((it, idx) => {
+        const safeBase = it.name.replace(/\.(zpl|txt)$/i, "");
+        const outName = `${String(idx + 1).padStart(3, "0")}-${safeBase}.pdf`;
+
+        return {
+          meta: { outName },
+          input: {
+            format: "pdf" as const,
+            zpl: it.zpl,
+            dpmm: params.dpmm,
+            widthMm: params.widthMm ?? params.widthIn ?? 100,
+            heightMm: params.heightMm ?? params.heightIn ?? 150,
+            index: 0,
+            rotation: params.rotation as 0 | 90 | 180 | 270,
+            darkness: params.darkness,
+          },
+        };
+      }),
+      params.concurrency,
     );
 
     const zip = new AdmZip();
-    for (const r of results) zip.addFile(r.outName, Buffer.from(r.pdf));
+    for (const r of results) zip.addFile(r.meta.outName, Buffer.from(r.output));
 
     const zipBuf = zip.toBuffer();
     reply.header("Content-Type", "application/zip");

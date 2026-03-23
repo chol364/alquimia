@@ -1,8 +1,7 @@
 import { z } from "zod";
-import pLimit from "p-limit";
 import AdmZip from "adm-zip";
-import { renderLabel } from "../services/labelaryClient.js";
 import { extractZplsFromTextFile, extractZplsFromZip } from "../services/zplBatchService.js";
+import { renderBatchWithWorkers } from "../services/renderPool.js";
 export const batchRoutes = async (app) => {
     const paramsSchema = z.object({
         dpmm: z.coerce.number().int().min(6).max(24).default(8),
@@ -68,10 +67,12 @@ export const batchRoutes = async (app) => {
             reply.code(400);
             return { error: `Muitos arquivos (${filtered.length}). Limite: ${maxFiles}` };
         }
-        const limit = pLimit(params.concurrency);
-        const results = await Promise.all(filtered.map((it, idx) => limit(async () => {
-            try {
-                const pdf = await renderLabel({
+        const results = await renderBatchWithWorkers(filtered.map((it, idx) => {
+            const safeBase = it.name.replace(/\.(zpl|txt)$/i, "");
+            const outName = `${String(idx + 1).padStart(3, "0")}-${safeBase}.pdf`;
+            return {
+                meta: { outName },
+                input: {
                     format: "pdf",
                     zpl: it.zpl,
                     dpmm: params.dpmm,
@@ -80,19 +81,12 @@ export const batchRoutes = async (app) => {
                     index: 0,
                     rotation: params.rotation,
                     darkness: params.darkness,
-                });
-                const safeBase = it.name.replace(/\.(zpl|txt)$/i, "");
-                const outName = `${String(idx + 1).padStart(3, "0")}-${safeBase}.pdf`;
-                return { outName, pdf };
-            }
-            catch (err) {
-                console.error(`Erro ao renderizar label [${it.name}]:`, err.message);
-                throw err;
-            }
-        })));
+                },
+            };
+        }), params.concurrency);
         const zip = new AdmZip();
         for (const r of results)
-            zip.addFile(r.outName, Buffer.from(r.pdf));
+            zip.addFile(r.meta.outName, Buffer.from(r.output));
         const zipBuf = zip.toBuffer();
         reply.header("Content-Type", "application/zip");
         reply.header("Content-Disposition", "attachment; filename=\"labels.zip\"");
